@@ -111,9 +111,11 @@ class Validator(object):
         self._schema_stack = []
         self._push_schema(schema, "schema")
         self._push_object(obj, "object")
-        self._validate()
-        self._pop_schema()
-        self._pop_object()
+        try:
+            self._validate()
+        finally:
+            self._pop_schema()
+            self._pop_object()
 
     def _validate(self):
         obj = self._object
@@ -219,8 +221,10 @@ class Validator(object):
             # Nested type check. This is pretty odd case. Here we
             # don't change our object stack (it's the same object).
             self._push_schema(Schema(json_type), ".type")
-            self._validate()
-            self._pop_schema()
+            try:
+                self._validate()
+            finally:
+                self._pop_schema()
         elif isinstance(json_type, list):
             # Alternative type check, here we may match _any_ of the types
             # in the list to be considered valid.
@@ -312,19 +316,23 @@ class Validator(object):
         assert isinstance(obj, dict)
         for prop in schema.properties.iterkeys():
             self._push_property_schema(prop)
-            if prop in obj:
-                self._push_property_object(prop)
-                self._validate()
-                self._pop_object()
-            else:
-                if not self._schema.optional:
-                    self._report_error(
-                        "{obj!r} does not have property {prop!r}".format(
-                            obj=obj, prop=prop),
-                        "Object lacks property {prop!r}".format(
-                            prop=prop),
-                        schema_suffix=".optional")
-            self._pop_schema()
+            try:
+                if prop in obj:
+                    self._push_property_object(prop)
+                    try:
+                        self._validate()
+                    finally:
+                        self._pop_object()
+                else:
+                    if not self._schema.optional:
+                        self._report_error(
+                            "{obj!r} does not have property {prop!r}".format(
+                                obj=obj, prop=prop),
+                            "Object lacks property {prop!r}".format(
+                                prop=prop),
+                            schema_suffix=".optional")
+            finally:
+                self._pop_schema()
 
     def _validate_additional_properties(self):
         obj = self._object
@@ -344,12 +352,16 @@ class Validator(object):
                         schema_suffix=".additionalProperties")
         else:
             # Check each property against this object
-            self._push_additional_property_schema()
-            for prop in obj.iterkeys():
-                self._push_property_object(prop)
-                self._validate()
-                self._pop_object()
-            self._pop_schema()
+            try:
+                self._push_additional_property_schema()
+                for prop in obj.iterkeys():
+                    self._push_property_object(prop)
+                    try:
+                        self._validate()
+                    finally:
+                        self._pop_object()
+            finally:
+                self._pop_schema()
 
     def _validate_enum(self):
         obj = self._object
@@ -375,11 +387,15 @@ class Validator(object):
             return
         if isinstance(items_schema_json, dict):
             self._push_array_schema()
-            for index, item in enumerate(obj):
-                self._push_array_item_object(index)
-                self._validate()
-                self._pop_object()
-            self._pop_schema()
+            try:
+                for index, item in enumerate(obj):
+                    self._push_array_item_object(index)
+                    try:
+                        self._validate()
+                    finally:
+                        self._pop_object()
+            finally:
+                self._pop_schema()
         elif isinstance(items_schema_json, list):
             if len(obj) < len(items_schema_json):
                 # If our data array is shorter than the schema then
@@ -415,9 +431,11 @@ class Validator(object):
                 else:
                     self._push_schema(item_schema, ".additionalProperties")
                 self._push_array_item_object(index)
-                self._validate()
-                self._pop_schema()
-                self._pop_object()
+                try:
+                    self._validate()
+                finally:
+                    self._pop_schema()
+                    self._pop_object()
 
     def _validate_requires(self):
         obj = self._object
